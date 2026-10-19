@@ -12,3 +12,4 @@ grad-cam
 opencv-python-headless
 streamlit
 requests
+httpx2
