@@ -1,0 +1,17 @@
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+models/*.pth
+models/*.pt
+
+mlruns/
+mlflow.db
+
+.env
+
+outputs/*
+!outputs/figures/
+!outputs/figures/**
+data/
