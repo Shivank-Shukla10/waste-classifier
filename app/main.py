@@ -68,7 +68,15 @@ def load_model():
     return model
 
 
-model = load_model()
+model = None
+
+def get_model():
+    global model
+
+    if model is None:
+        model = load_model()
+
+    return model
 
 
 # --------------------------------------------------
@@ -105,16 +113,17 @@ def health():
 async def predict(
     file: UploadFile = File(...)
 ):
+    # Load model only when prediction is requested
+    model = get_model()
 
     # Validate file type
-    if not file.content_type.startswith("image/"):
+    if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(
             status_code=400,
             detail="Please upload a valid image file."
         )
 
     try:
-
         contents = await file.read()
 
         image = Image.open(
@@ -122,7 +131,6 @@ async def predict(
         ).convert("RGB")
 
     except Exception:
-
         raise HTTPException(
             status_code=400,
             detail="Unable to read the uploaded image."
@@ -135,7 +143,6 @@ async def predict(
 
     # Prediction
     with torch.no_grad():
-
         outputs = model(
             input_tensor
         )
@@ -157,7 +164,6 @@ async def predict(
         top_probabilities,
         top_indices
     ):
-
         predictions.append({
             "class": CLASS_NAMES[index.item()],
             "confidence": round(
@@ -175,7 +181,11 @@ async def predict(
 
 
 @app.post("/explain")
-async def explain(file: UploadFile = File(...)):
+async def explain(
+    file: UploadFile = File(...)
+):
+    # Load model only when explanation is requested
+    model = get_model()
 
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(
@@ -183,18 +193,27 @@ async def explain(file: UploadFile = File(...)):
             detail="Please upload a valid image file."
         )
 
-    contents = await file.read()
+    try:
+        contents = await file.read()
 
-    # Open image
-    image = Image.open(
-        io.BytesIO(contents)
-    ).convert("RGB")
+        # Open image
+        image = Image.open(
+            io.BytesIO(contents)
+        ).convert("RGB")
+
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to read the uploaded image."
+        )
 
     # ---------------------------------------------------------
     # Model input
     # ---------------------------------------------------------
 
-    input_tensor = transform(image).unsqueeze(0)
+    input_tensor = transform(
+        image
+    ).unsqueeze(0).to(DEVICE)
 
     # ---------------------------------------------------------
     # Get prediction
@@ -204,7 +223,10 @@ async def explain(file: UploadFile = File(...)):
         output = model(input_tensor)
 
     predicted_class = int(
-        torch.argmax(output, dim=1).item()
+        torch.argmax(
+            output,
+            dim=1
+        ).item()
     )
 
     # ---------------------------------------------------------
@@ -230,9 +252,7 @@ async def explain(file: UploadFile = File(...)):
     )[0]
 
     # ---------------------------------------------------------
-    # IMPORTANT:
-    # Grad-CAM output is 224x224.
-    # Resize original image to the same size.
+    # Resize original image to Grad-CAM size
     # ---------------------------------------------------------
 
     cam_size = (
